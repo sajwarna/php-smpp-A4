@@ -71,7 +71,20 @@ class PduParser
                 $udhi->concat->part = next($ar);
             }
         }
-        $message = Helper::getString($ar, $smLength);
+        if ($dataCoding == 8) {
+            $message = "";
+            for ($binaryCount = 0; $binaryCount < $smLength; $binaryCount++) {
+                $binaryChar = next($ar);
+                if ($binaryChar === false) {
+                    break;
+                }
+                $binaryChar = ($binaryChar == 0) ? "00" : dechex($binaryChar);
+                $binaryChar = (strlen($binaryChar) == 1) ? "0" . $binaryChar : $binaryChar;
+                $message .= $binaryChar;
+            }
+        } else {
+            $message = Helper::getString($ar, $smLength);
+        }
 
         // Check for optional params, and parse them
         $tags = [];
