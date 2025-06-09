@@ -21,6 +21,7 @@ class SmppSms extends Pdu
     public $dataCoding;
     public $message;
     public $tags;
+    public $udhi;
 
     // Unused in deliver_sm
     public $scheduleDeliveryTime;
@@ -49,10 +50,11 @@ class SmppSms extends Pdu
      * @param string $validityPeriod (optional)
      * @param integer $smDefaultMsgId (optional)
      * @param integer $replaceIfPresentFlag (optional)
+     * @param UDHI $udhi (optional)
      */
     public function __construct($id, $status, $sequence, $body, $service_type, Address $source, Address $destination,
                                 $esmClass, $protocolId, $priorityFlag, $registeredDelivery, $dataCoding, $message, $tags,
-                                $scheduleDeliveryTime = null, $validityPeriod = null, $smDefaultMsgId = null, $replaceIfPresentFlag = null)
+                                $scheduleDeliveryTime = null, $validityPeriod = null, $smDefaultMsgId = null, $replaceIfPresentFlag = null, $udhi=null)
     {
         parent::__construct($id, $status, $sequence, $body);
         $this->service_type = $service_type;
@@ -69,6 +71,7 @@ class SmppSms extends Pdu
         $this->validityPeriod = $validityPeriod;
         $this->smDefaultMsgId = $smDefaultMsgId;
         $this->replaceIfPresentFlag = $replaceIfPresentFlag;
+        $this->udhi = $udhi;
     }
 
 }
