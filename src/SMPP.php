@@ -130,7 +130,7 @@ class SMPP
     const ESM_DELIVER_CONV_ABORT = 0x18;
     const ESM_DELIVER_IDN = 0x20; // Intermediate delivery notification
     // ESM bits 7-6
-    const ESM_UHDI = 0x40;
+    const ESM_UDHI = 0x40;
     const ESM_REPLYPATH = 0x80;
 
     // SMPP v3.4 - 5.2.17 page 124
