@@ -55,6 +55,22 @@ class PduParser
         $dataCoding = next($ar);
         next($ar); // sm_default_msg_id
         $smLength = next($ar);
+        $udhi = null;
+        if(($esmClass & SMPP::ESM_UDHI) != 0) { // Message has a UDHI
+            $udhi = new \stdClass();
+
+            $udhi->length = next($ar);
+            $udhi->iei = next($ar);
+
+            next($ar); // iedl_length
+
+            if($udhi->iei == 0x00) { // Information-Element-Identifier = 0x00 = Concatenated short messages, 8-bit reference number
+                $udhi->concat = new \stdClass();
+                $udhi->concat->identifier = (int)next($ar);
+                $udhi->concat->parts = next($ar);
+                $udhi->concat->part = next($ar);
+            }
+        }
         $message = Helper::getString($ar, $smLength);
 
         // Check for optional params, and parse them
@@ -92,6 +108,7 @@ class PduParser
         $sm->dataCoding = $dataCoding;
         $sm->message = $message;
         $sm->tags = $tags;
+        $sm->udhi = $udhi;
 
         foreach ($sm->tags as $tag) {
             if (Tag::RECEIPTED_MESSAGE_ID == $tag->id) {
