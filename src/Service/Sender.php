@@ -37,7 +37,8 @@ class Sender extends Service
         $encodedMessage = $message;
         $dataCoding = SMPP::DATA_CODING_DEFAULT;
         if (Helper::hasUTFChars($message)) {
-            $encodedMessage = iconv('UTF-8', 'UCS-2BE', $message);
+            $encodedMessage = iconv('UTF-8', 'UTF-16BE', $message);
+            //$encodedMessage = iconv('UTF-8', 'UCS-2BE', $message);
             $dataCoding = SMPP::DATA_CODING_UCS2;
         }
 
