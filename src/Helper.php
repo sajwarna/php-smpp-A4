@@ -15,7 +15,7 @@ class Helper
      * @param boolean $firstRead - is this the first bytes read from array?
      * @return read string.
      */
-    public static function getString(&$ar, $maxlen = 255, $firstRead = false)
+    public static function getString(&$ar, $maxlen = 255, $firstRead = false, $stopOnZero = true)
     {
         $s = "";
         $i = 0;
@@ -23,9 +23,11 @@ class Helper
             $c = ($firstRead && $i == 0) ? current($ar) : next($ar);
             if ($c != 0) {
                 $s .= chr($c);
+            } elseif ($stopOnZero === false) {
+                $s .= "@";
             }
             $i++;
-        } while ($i < $maxlen && $c != 0);
+        } while ((($i < $maxlen) && ($c != 0) && ($stopOnZero === true)) || (($stopOnZero === false) && ($i < $maxlen))) ;
         return $s;
     }
 
