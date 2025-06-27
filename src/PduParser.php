@@ -83,7 +83,7 @@ class PduParser
                 $message .= $binaryChar;
             }
         } else {
-            $message = Helper::getString($ar, $smLength);
+            $message = Helper::getString($ar, $smLength, false, false);
         }
 
         // Check for optional params, and parse them
