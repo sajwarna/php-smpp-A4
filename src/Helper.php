@@ -23,7 +23,7 @@ class Helper
             $c = ($firstRead && $i == 0) ? current($ar) : next($ar);
             if ($c != 0) {
                 $s .= chr($c);
-            } elseif ($stopOnZero === false) {
+            } elseif ((trim($c) != "") && ($stopOnZero === false)) {
                 $s .= "@";
             }
             $i++;
