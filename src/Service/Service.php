@@ -15,6 +15,7 @@ abstract class Service
     protected $bindMode;
     protected $debug = false;
     protected $debugHandler = 'error_log';
+    protected $useTls;
 
     /** @var Client */
     public $client = null;
@@ -25,15 +26,17 @@ abstract class Service
      * @param string $login
      * @param string $pass
      * @param string $bindMode example PhpSmpp\Client::BIND_MODE_TRANSMITTER
+     * @param bool $useTls
      * @param bool $debug
      */
-    public function __construct($hosts, $login, $pass, $bindMode, $debug = false)
+    public function __construct($hosts, $login, $pass, $bindMode, $useTls = false, $debug = false)
     {
         $this->hosts = $hosts;
         $this->login = $login;
         $this->pass = $pass;
         $this->bindMode = $bindMode;
         $this->debug = $debug;
+        $this->useTls = $useTls;
         $this->initClient();
     }
 
@@ -44,7 +47,7 @@ abstract class Service
         if (!empty($this->client)) {
             return;
         }
-        $this->client = new Client($this->hosts);
+        $this->client = new Client($this->hosts, $this->useTls);
         $this->client->debug = $this->debug;
         $this->client->setDebugHandler($this->debugHandler);
     }

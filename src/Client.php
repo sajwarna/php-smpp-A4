@@ -95,6 +95,7 @@ class Client
 
     /** @var array */
     protected $hosts;
+    protected $useTls;
     protected $login;
     protected $pass;
 
@@ -108,10 +109,10 @@ class Client
      * Client constructor.
      * @param array $hosts ['ip:port','ip2:port2']
      */
-    public function __construct($hosts)
+    public function __construct($hosts, $useTls = false)
     {
         $this->hosts = $hosts;
-
+	$this->useTls = $useTls;
         // Internal parameters
         $this->sequence_number = 1;
         $this->debug = false;
@@ -141,7 +142,7 @@ class Client
                 $hosts[] = $ar[0];
                 $ports[] = $ar[1] ?? static::DEFAULT_PORT;
             }
-            $this->transport = new SMPPSocketTransport($hosts, $ports, false, $this->debugHandler);
+            $this->transport = new SMPPSocketTransport($hosts, $ports, false, $this->useTls, $this->debugHandler);
             $this->transport->setRecvTimeout(10000); // 10 seconds
         }
         return $this->transport;

@@ -31,7 +31,12 @@ class Sender extends Service
     public function send($phone, $message, $from)
     {
         $this->enshureConnection();
-        $from = new Address($from, SMPP::TON_ALPHANUMERIC);
+        $fromCheck = (string) $from;
+        if (ctype_digit($fromCheck) === true) {
+        	$from = new Address($from, SMPP::TON_INTERNATIONAL);
+        } else { 	
+        	$from = new Address($from, SMPP::TON_ALPHANUMERIC);
+        }
         $to = new Address((int)$phone, SMPP::TON_INTERNATIONAL, SMPP::NPI_E164);
 
         $encodedMessage = $message;

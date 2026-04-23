@@ -19,6 +19,7 @@ class SocketTransport
     protected $socket;
     protected $hosts;
     protected $persist;
+    protected $useTls;
     protected $debugHandler;
     public $debug;
 
@@ -38,13 +39,14 @@ class SocketTransport
      * @param boolean $persist use persistent sockets
      * @param mixed $debugHandler callback for debug info
      */
-    public function __construct(array $hosts, $ports, $persist = false, $debugHandler = null)
+    public function __construct(array $hosts, $ports, $persist = false, $useTls = false, $debugHandler = null)
     {
         $this->debug = self::$defaultDebug;
         $this->debugHandler = $debugHandler ? $debugHandler : 'error_log';
 
         // Deal with optional port
         $h = array();
+        $this->useTls = $useTls;
         foreach ($hosts as $key => $host) {
             $h[] = array($host, is_array($ports) ? $ports[$key] : $ports);
         }
@@ -188,6 +190,9 @@ class SocketTransport
      */
     public function isOpen()
     {
+	if ($this->useTls) {
+		return $this->isOpenTls();
+	}
         if (!is_resource($this->socket) && !$this->socket instanceof \Socket) return false;
         $r = null;
         $w = null;
@@ -196,6 +201,26 @@ class SocketTransport
         if ($res === false) throw new SocketTransportException('Could not examine socket; ' . socket_strerror(socket_last_error()), socket_last_error());
         if (!empty($e)) return false; // if there is an exception on our socket it's probably dead
         return true;
+    }
+
+    private function isOpenTls()
+    {
+	if (!is_resource($this->socket))
+			return false;
+		
+		$r = null;
+		$w = null;
+		$e = [$this->socket];
+		$res = stream_select($r, $w, $e, 0);
+		
+		if ($res === false)
+			throw new SocketTransportException('Could not examine stream');
+		
+		// if there is an exception on our stream it's probably dead
+		if (!empty($e))
+			return false;
+		
+		return true;
     }
 
     /**
@@ -218,6 +243,9 @@ class SocketTransport
      */
     public function open()
     {
+        if ($this->useTls === true) {
+		return $this->openTls();
+	}
         if (!self::$forceIpv4) {
             $socket6 = @socket_create(AF_INET6, SOCK_STREAM, SOL_TCP);
             if ($socket6 == false) throw new SocketTransportException('Could not create socket; ' . socket_strerror(socket_last_error()), socket_last_error());
@@ -270,6 +298,75 @@ class SocketTransport
         throw new SocketTransportException('Could not connect to any of the specified hosts');
     }
 
+    private function openTls() {
+        $context = stream_context_create([
+          'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+            'allow_self_signed' => true,
+          ],
+        ]);
+
+	$it = new \ArrayIterator($this->hosts);
+        while ($it->valid()) {
+            list($hostname, $port, $ip6s, $ip4s) = $it->current();
+            if (!self::$forceIpv4 && !empty($ip6s)) { // Attempt IPv6s first
+                foreach ($ip6s as $ip) {
+                    if ($this->debug) call_user_func($this->debugHandler, "Connecting to $ip:$port...");
+                    $stream = stream_socket_client(
+                       'tcp://' . $ip . ':' . $port,
+                       $errno,
+                       $errstr,
+                       30,
+                       STREAM_CLIENT_CONNECT,
+                       $context
+                    );
+		    
+                    if ($stream !== false) {
+                        if ($this->debug) call_user_func($this->debugHandler, "Connected to $ip:$port!");
+                        $result = stream_socket_enable_crypto($stream, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+                        if (($result !== true) && ($this->debug)) {
+                        	call_user_func($this->debugHandler, "Socket connect to $ip:$port failed; TLS negotiating failed");
+                        } else {
+                          $this->socket = $stream;
+                          return;
+                        }
+                    } elseif ($this->debug) {
+                        call_user_func($this->debugHandler, "Socket connect to $ip:$port failed; $errstr ($errno)");
+                    }
+                }
+            }
+            if (!self::$forceIpv6 && !empty($ip4s)) {
+                foreach ($ip4s as $ip) {
+		    if ($this->debug) call_user_func($this->debugHandler, "Connecting to $ip:$port...");
+                    $stream = stream_socket_client(
+                       'tcp://' . $ip . ':' . $port,
+                       $errno,
+                       $errstr,
+                       30,
+                       STREAM_CLIENT_CONNECT,
+                       $context
+                    );
+
+                    if ($stream !== false) {
+                        if ($this->debug) call_user_func($this->debugHandler, "Connected to $ip:$port!");
+                        $result = stream_socket_enable_crypto($stream, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+                        if (($result !== true) && ($this->debug)) {
+                                call_user_func($this->debugHandler, "Socket connect to $ip:$port failed; TLS negotiating failed");
+                        } else {
+                          $this->socket = $stream;
+                          return;
+                        }
+                    } elseif ($this->debug) {
+                        call_user_func($this->debugHandler, "Socket connect to $ip:$port failed; $errstr ($errno)");
+                    }
+                }
+            }
+            $it->next();
+        }
+        throw new SocketTransportException('Could not connect to any of the specified hosts');
+    }
+
     /**
      * Do a clean shutdown of the socket.
      * Since we don't reuse sockets, we can just close and forget about it,
@@ -295,6 +392,7 @@ class SocketTransport
      */
     public function hasData()
     {
+	if ($this->useTls) return $this->hasDataTls();
         $r = array($this->socket);
         $w = null;
         $e = null;
@@ -303,6 +401,21 @@ class SocketTransport
         if (!empty($r)) return true;
         return false;
     }
+
+    public function hasDataTls (): bool
+	{
+		$r = [$this->socket];
+		$w = null;
+		$e = null;
+		$res = stream_select($r, $w, $e, 0);
+		if ($res === false)
+			throw new SocketTransportException('Could not examine stream');
+		
+		if (!empty($r))
+			return true;
+		
+		return false;
+	}
 
     /**
      * Read up to $length bytes from the socket.
@@ -317,6 +430,7 @@ class SocketTransport
      */
     public function read($length)
     {
+	if ($this->useTls) return $this->readTls($length);
         $d = socket_read($this->socket, $length, PHP_BINARY_READ);
         if ($d === false && socket_last_error() === SOCKET_EAGAIN) return false; // sockets give EAGAIN on timeout
         if ($d === false) throw new SocketTransportException('Could not read ' . $length . ' bytes from socket; ' . socket_strerror(socket_last_error()), socket_last_error());
@@ -332,6 +446,7 @@ class SocketTransport
      */
     public function readAll($length)
     {
+	if ($this->useTls) return $this->readAllTls($length);
         $d = "";
         $r = 0;
         $readTimeout = socket_get_option($this->socket, SOL_SOCKET, SO_RCVTIMEO);
@@ -356,6 +471,72 @@ class SocketTransport
     }
 
     /**
+	 * Read up to $length bytes from the stream.
+	 * Does not guarantee that all the bytes are read.
+	 * Returns false on EOF
+	 * Returns false on timeout (technically EAGAIN error).
+	 * Throws SmppTransportException if data could not be read.
+	 *
+	 * @throws SmppTransportException
+	 */
+	public function readTls (int $length): mixed
+	{
+		if (!is_resource($this->socket) || feof($this->socket))
+			throw new SmppTransportException('Stream connection error');
+                $readTimeout = $this->millisecToArray(self::$defaultRecvTimeout);
+                stream_set_timeout($this->socket, $readTimeout['sec'], $readTimeout['usec']);
+		$d = stream_get_contents($this->socket, $length);
+		if ($d === false)
+			throw new SocketTransportException('Could not read ' . $length . ' bytes from stream');
+		
+		if ($d === '')
+			return false;
+		
+		return $d;
+	}
+	
+	/**
+	 * Read all the bytes, and block until they are read.
+	 * Timeout throws SmppTransportException
+	 *
+	 * @throws SmppTransportException
+	 */
+	public function readAllTls (int $length): string
+	{
+		$d = '';
+		$r = 0;
+		$readTimeout = $this->millisecToArray(self::$defaultRecvTimeout);
+		stream_set_timeout($this->socket, $readTimeout['sec'], $readTimeout['usec']);
+		
+		while ($r < $length)
+		{
+			$buf = stream_get_contents($this->socket, $length - $r);
+			if ($buf === false)
+				throw new SmppTransportException('Could not read ' . $length . ' bytes from stream');
+			
+			$d .= $buf;
+			if (strlen($d) === $length)
+				return $d;
+			
+			// wait for data to be available, up to timeout
+			$r = [$this->socket];
+			$w = null;
+			$e = [$this->socket];
+			$res = stream_select($r, $w, $e, $readTimeout['sec'], $readTimeout['usec']);
+			
+			// check
+			if ($res === false)
+				throw new SocketTransportException('Could not examine stream');
+			
+			if (!empty($e))
+				throw new SocketTransportException('Stream socket exception while waiting for data');
+			
+			if (empty($r))
+				throw new SocketTransportException('Timed out waiting for data on stream');
+		}
+	}
+
+    /**
      * Write (all) data to the socket.
      * Timeout throws SocketTransportException
      *
@@ -364,6 +545,9 @@ class SocketTransport
      */
     public function write($buffer, $length)
     {
+	if ($this->useTls) {
+		return $this->writeTls($buffer, $length);
+	}
         $r = $length;
         $writeTimeout = socket_get_option($this->socket, SOL_SOCKET, SO_SNDTIMEO);
 
@@ -387,4 +571,50 @@ class SocketTransport
             if (empty($w)) throw new SocketTransportException('Timed out waiting to write data on socket');
         }
     }
+
+    public function writeTls (string $buffer, int $length): void
+	{
+		if (!is_resource($this->socket) || feof($this->socket))
+			throw new SocketTransportException('Stream connection error');
+		
+		$r = $length;
+		$writeTimeout = $this->millisecToArray(self::$defaultSendTimeout);
+		stream_set_timeout($this->socket, $writeTimeout['sec'], $writeTimeout['usec']);
+		
+		while ($r > 0)
+		{
+			$wrote = @fwrite($this->socket, $buffer, $r);
+			if ($wrote === false)
+				throw new SocketTransportException('Could not write ' . $length . ' bytes to stream');
+			
+			$r -= $wrote;
+			if ($r === 0)
+				return;
+			
+			$buffer = substr($buffer, $wrote);
+			
+			// wait for the socket to accept more data, up to timeout
+			$r = null;
+			$w = [$this->socket];
+			$e = [$this->socket];
+			$res = stream_select($r, $w, $e, $writeTimeout['sec'], $writeTimeout['usec']);
+			
+			// check
+			if ($res === false)
+				throw new SocketTransportException('Could not examine stream');
+			
+			if (!empty($e))
+				throw new SocketTransportException('Stream socket exception while waiting to write data');
+			
+			if (empty($w))
+				throw new SocketTransportException('Timed out waiting to write data on stream');
+		}
+	}
+		
+        private function millisecToArray (int $milliseconds): array
+	{
+		$usec = $milliseconds * 1000;
+		return ['sec' => (int)floor($usec / 1000000), 'usec' => $usec % 1000000];
+	}
 }
+
