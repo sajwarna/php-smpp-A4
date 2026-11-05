@@ -64,9 +64,8 @@ class Helper
         if($matches) {
             return true;
         } else {
-            return false;
+            return (bool)preg_match('/[А-Яа-яЁё]/u', $message);
         }
-        //return (bool)preg_match('/[А-Яа-яЁё]/u', $message);
     }
 
 }
